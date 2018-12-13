@@ -57,6 +57,7 @@
 #include "app_usbd_string_desc.h"
 #include "app_usbd_cdc_acm.h"
 #include "app_usbd_serial_num.h"
+#include "vs1053.h"
 
 #include "nrf_log.h"
 #include "nrf_log_ctrl.h"
@@ -64,35 +65,8 @@
 
 #define MAX_BUF_SIZE 32
 
-// -- USB DEFINES --
-static void cdc_acm_user_ev_handler(app_usbd_class_inst_t const * p_inst,
-                                    app_usbd_cdc_acm_user_event_t event);
-
-#define CDC_ACM_COMM_INTERFACE  0
-#define CDC_ACM_COMM_EPIN       NRF_DRV_USBD_EPIN2
-
-#define CDC_ACM_DATA_INTERFACE  1
-#define CDC_ACM_DATA_EPIN       NRF_DRV_USBD_EPIN1
-#define CDC_ACM_DATA_EPOUT      NRF_DRV_USBD_EPOUT1
-
-/** @brief CDC_ACM class instance */
-APP_USBD_CDC_ACM_GLOBAL_DEF(m_app_cdc_acm,
-                            cdc_acm_user_ev_handler,
-                            CDC_ACM_COMM_INTERFACE,
-                            CDC_ACM_DATA_INTERFACE,
-                            CDC_ACM_COMM_EPIN,
-                            CDC_ACM_DATA_EPIN,
-                            CDC_ACM_DATA_EPOUT,
-                            APP_USBD_CDC_COMM_PROTOCOL_AT_V250);
-
 // -- ESB DEFINES --
-static nrf_esb_payload_t        tx_payload = NRF_ESB_CREATE_PAYLOAD(0, 0x01, 0x00, 0x00, 0x00, 0x11, 0x00, 0x00, 0x00);
-
 static nrf_esb_payload_t        rx_payload;
-
-APP_TIMER_DEF(esb_transmit_timer_id);
-bool esb_ready = false;
-
 // -- END OF ESB DEFINES
 
 // -- ESB CODE --
@@ -109,21 +83,11 @@ void nrf_esb_event_handler(nrf_esb_evt_t const * p_event)
             (void) nrf_esb_flush_tx();
             (void) nrf_esb_start_tx();
             break;
+
         case NRF_ESB_EVENT_RX_RECEIVED:
             NRF_LOG_DEBUG("RX RECEIVED EVENT");
-            while (nrf_esb_read_rx_payload(&rx_payload) == NRF_SUCCESS)
-            {
-                if (rx_payload.length > 0)
-                {
-                    NRF_LOG_DEBUG("RX RECEIVED PAYLOAD");
-                }
-            }
             break;
     }
-}
-
-void esb_transmit_timer_handler(void) {
-    esb_ready = true;
 }
 
 void clocks_start( void )
@@ -142,9 +106,8 @@ uint32_t esb_init( void )
     uint8_t addr_prefix[8] = {0xE7, 0xC2, 0xC3, 0xC4, 0xC5, 0xC6, 0xC7, 0xC8 };
 
     nrf_esb_config_t nrf_esb_config         = NRF_ESB_DEFAULT_CONFIG;
-    nrf_esb_config.retransmit_count         = 0;
     nrf_esb_config.event_handler            = nrf_esb_event_handler;
-    nrf_esb_config.mode                     = NRF_ESB_MODE_PTX;
+    nrf_esb_config.mode                     = NRF_ESB_MODE_PRX;
 
     err_code = nrf_esb_init(&nrf_esb_config);
 
@@ -162,118 +125,16 @@ uint32_t esb_init( void )
     return err_code;
 }
 
-// -- USB Code --
-
-// USB CODE START
-static bool m_usb_connected = false;
-
-
-/** @brief User event handler @ref app_usbd_cdc_acm_user_ev_handler_t */
-static void cdc_acm_user_ev_handler(app_usbd_class_inst_t const * p_inst,
-                                    app_usbd_cdc_acm_user_event_t event)
-{
-    app_usbd_cdc_acm_t const * p_cdc_acm = app_usbd_cdc_acm_class_get(p_inst);
-
-    switch (event)
-    {
-        case APP_USBD_CDC_ACM_USER_EVT_PORT_OPEN:
-        {
-            NRF_LOG_INFO("CDC ACM port opened");
-
-            /* Set up the first transfer */
-            ret_code_t ret = app_usbd_cdc_acm_read(p_cdc_acm, tx_payload.data, MAX_BUF_SIZE);
-            VERIFY_SUCCESS(ret);
-            break;
-        }
-
-        case APP_USBD_CDC_ACM_USER_EVT_PORT_CLOSE:
-            NRF_LOG_INFO("CDC ACM port closed");
-            break;
-
-        case APP_USBD_CDC_ACM_USER_EVT_TX_DONE:
-            break;
-
-        case APP_USBD_CDC_ACM_USER_EVT_RX_DONE:
-        {
-            ret_code_t ret;
-
-            while (!nrf_esb_is_idle() || !esb_ready);
-
-            tx_payload.noack = 1;
-            tx_payload.length = MAX_BUF_SIZE;
-            ret = nrf_esb_write_payload(&tx_payload);
-            VERIFY_SUCCESS(ret);
-            esb_ready = false;
-
-            ret = app_usbd_cdc_acm_read(p_cdc_acm, tx_payload.data, MAX_BUF_SIZE);
-            VERIFY_SUCCESS(ret);
-
-            break;
-        }
-        default:
-            break;
-    }
-}
-
-static void usbd_user_ev_handler(app_usbd_event_type_t event)
-{
-    switch (event)
-    {
-        case APP_USBD_EVT_DRV_SUSPEND:
-            break;
-
-        case APP_USBD_EVT_DRV_RESUME:
-            break;
-
-        case APP_USBD_EVT_STARTED:
-            break;
-
-        case APP_USBD_EVT_STOPPED:
-            app_usbd_disable();
-            break;
-
-        case APP_USBD_EVT_POWER_DETECTED:
-            NRF_LOG_INFO("USB power detected");
-
-            if (!nrf_drv_usbd_is_enabled())
-            {
-                app_usbd_enable();
-            }
-            break;
-
-        case APP_USBD_EVT_POWER_REMOVED:
-        {
-            NRF_LOG_INFO("USB power removed");
-            m_usb_connected = false;
-            app_usbd_stop();
-        }
-            break;
-
-        case APP_USBD_EVT_POWER_READY:
-        {
-            NRF_LOG_INFO("USB ready");
-            m_usb_connected = true;
-            app_usbd_start();
-        }
-            break;
-
-        default:
-            break;
-    }
-}
-
 int main(void)
 {
     ret_code_t err_code;
-    static const app_usbd_config_t usbd_config = {
-        .ev_state_proc = usbd_user_ev_handler
-    };
+
+    printf("Init\n");
 
     err_code = NRF_LOG_INIT(NULL);
     APP_ERROR_CHECK(err_code);
 
     NRF_LOG_DEFAULT_BACKENDS_INIT();
-
 
     clocks_start();
 
@@ -283,40 +144,26 @@ int main(void)
 
     app_timer_init();
 
-    // Create timers
-    err_code = app_timer_create(&esb_transmit_timer_id,
-                                APP_TIMER_MODE_REPEATED,
-                                esb_transmit_timer_handler);
-    APP_ERROR_CHECK(err_code);
-
-    err_code = app_timer_start(esb_transmit_timer_id, APP_TIMER_TICKS(2), NULL);
-    APP_ERROR_CHECK(err_code);
-
-    app_usbd_serial_num_generate();
-    ret = app_usbd_init(&usbd_config);
-    APP_ERROR_CHECK(ret);
-
-    app_usbd_class_inst_t const * class_cdc_acm = app_usbd_cdc_acm_class_inst_get(&m_app_cdc_acm);
-    ret = app_usbd_class_append(class_cdc_acm);
-    APP_ERROR_CHECK(ret);
-
     err_code = esb_init();
     APP_ERROR_CHECK(err_code);
 
-    NRF_LOG_DEBUG("Starting USB...");
+    vs1053_init();
 
-    ret = app_usbd_power_events_enable();
-    APP_ERROR_CHECK(ret);
+    vs1053_set_volume(0, 0); // Maximum volume
 
-    // Process USB events forever
-    for (;;)
-    {
-        while (app_usbd_event_queue_process())
-        {
-            /* Nothing to do */
+    err_code = nrf_esb_start_rx();
+    APP_ERROR_CHECK(err_code);
+
+    printf("Start Recv-Play loop...\n");
+
+    // Process ESB packets forever, send them to the MP3 player
+    for (;;) {
+        while (nrf_esb_read_rx_payload(&rx_payload) == NRF_SUCCESS) {
+            if (rx_payload.length > 0) {
+                vs1053_send_data(rx_payload.data, rx_payload.length);
+            }
         }
 
-        /* Sleep CPU only if there was no interrupt since last loop processing */
         __WFE();
     }
 }
