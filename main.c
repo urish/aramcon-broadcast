@@ -90,6 +90,9 @@ static nrf_esb_payload_t        tx_payload = NRF_ESB_CREATE_PAYLOAD(0, 0x01, 0x0
 
 static nrf_esb_payload_t        rx_payload;
 
+APP_TIMER_DEF(esb_transmit_timer_id);
+bool esb_ready = false;
+
 // -- END OF ESB DEFINES
 
 // -- ESB CODE --
@@ -119,6 +122,9 @@ void nrf_esb_event_handler(nrf_esb_evt_t const * p_event)
     }
 }
 
+void esb_transmit_timer_handler(void) {
+    esb_ready = true;
+}
 
 void clocks_start( void )
 {
@@ -191,12 +197,13 @@ static void cdc_acm_user_ev_handler(app_usbd_class_inst_t const * p_inst,
         {
             ret_code_t ret;
 
-            while (!nrf_esb_is_idle());
+            while (!nrf_esb_is_idle() || !esb_ready);
 
             tx_payload.noack = 1;
             tx_payload.length = MAX_BUF_SIZE;
             ret = nrf_esb_write_payload(&tx_payload);
             VERIFY_SUCCESS(ret);
+            esb_ready = false;
 
             ret = app_usbd_cdc_acm_read(p_cdc_acm, tx_payload.data, MAX_BUF_SIZE);
             VERIFY_SUCCESS(ret);
@@ -272,6 +279,18 @@ int main(void)
 
     ret_code_t ret = nrf_drv_clock_init();
     APP_ERROR_CHECK(ret);
+    nrf_drv_clock_lfclk_request(NULL);
+
+    app_timer_init();
+
+    // Create timers
+    err_code = app_timer_create(&esb_transmit_timer_id,
+                                APP_TIMER_MODE_REPEATED,
+                                esb_transmit_timer_handler);
+    APP_ERROR_CHECK(err_code);
+
+    err_code = app_timer_start(esb_transmit_timer_id, APP_TIMER_TICKS(2), NULL);
+    APP_ERROR_CHECK(err_code);
 
     app_usbd_serial_num_generate();
     ret = app_usbd_init(&usbd_config);
