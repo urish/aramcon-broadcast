@@ -6,6 +6,7 @@ ser = serial.Serial(sys.argv[1], 250000)
 
 t = time.time()
 cnt = 0
+pkt = 0
 with open(sys.argv[2], 'rb') as f:
     buf = f.read(32)
     while buf:
@@ -13,7 +14,8 @@ with open(sys.argv[2], 'rb') as f:
         cnt += len(buf)
         if time.time() - t > 1:
             t = time.time()
-            print(cnt)
+            print(pkt, cnt)
+            pkt += 1
             cnt = 0
         buf = f.read(32)
 ser.close()
