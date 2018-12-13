@@ -122,7 +122,7 @@ void nrf_esb_event_handler(nrf_esb_evt_t const * p_event)
     }
 }
 
-void esb_transmit_timer_handler(void) {
+void esb_transmit_timer_handler(void *p_context) {
     esb_ready = true;
 }
 
@@ -263,7 +263,7 @@ static void usbd_user_ev_handler(app_usbd_event_type_t event)
 }
 
 int main(void)
-{
+ {
     ret_code_t err_code;
     static const app_usbd_config_t usbd_config = {
         .ev_state_proc = usbd_user_ev_handler
