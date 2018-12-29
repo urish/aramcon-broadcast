@@ -180,6 +180,8 @@ static void cdc_acm_user_ev_handler(app_usbd_class_inst_t const * p_inst,
         {
             NRF_LOG_INFO("CDC ACM port opened");
 
+            esb_init();
+
             /* Set up the first transfer */
             ret_code_t ret = app_usbd_cdc_acm_read(p_cdc_acm, tx_payload.data, MAX_BUF_SIZE);
             VERIFY_SUCCESS(ret);
@@ -299,9 +301,6 @@ int main(void)
     app_usbd_class_inst_t const * class_cdc_acm = app_usbd_cdc_acm_class_inst_get(&m_app_cdc_acm);
     ret = app_usbd_class_append(class_cdc_acm);
     APP_ERROR_CHECK(ret);
-
-    err_code = esb_init();
-    APP_ERROR_CHECK(err_code);
 
     NRF_LOG_DEBUG("Starting USB...");
 
