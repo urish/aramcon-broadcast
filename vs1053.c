@@ -45,19 +45,13 @@
 #define HIGH 1
 
 static const nrf_drv_spi_t m_spi_master_0 = NRF_DRV_SPI_INSTANCE(0);
-static bool spi_xfer_done = true;
 
 inline static ret_code_t spi_transfer_and_wait(
                                 uint8_t const * p_tx_buffer,
                                 uint8_t         tx_buffer_length,
                                 uint8_t       * p_rx_buffer,
                                 uint8_t         rx_buffer_length) {
-    spi_xfer_done = false;
-    ret_code_t result = nrf_drv_spi_transfer(&m_spi_master_0, p_tx_buffer, tx_buffer_length, p_rx_buffer, rx_buffer_length);
-    while (!spi_xfer_done) {
-       __WFE();
-    }
-    return result;
+    return nrf_drv_spi_transfer(&m_spi_master_0, p_tx_buffer, tx_buffer_length, p_rx_buffer, rx_buffer_length);
 }
 
 static uint16_t vs1053_read(uint8_t addr) {
@@ -157,16 +151,6 @@ void vs1053_send_data(uint8_t *buf, uint8_t len) {
     nrf_gpio_pin_write(VS1053_PIN_LED, LOW);
 }
 
-/**
- * @brief SPI user event handler.
- * @param event
- */
-void spi_event_handler(nrf_drv_spi_evt_t const * p_event,
-                       void *                    p_context)
-{
-    spi_xfer_done = true;
-}
-
 uint32_t vs1053_init() {
     uint32_t err_code;
     nrf_drv_spi_config_t spi_config = NRF_DRV_SPI_DEFAULT_CONFIG;
@@ -175,7 +159,7 @@ uint32_t vs1053_init() {
     spi_config.mosi_pin = VS1053_PIN_MOSI;
     spi_config.sck_pin  = VS1053_PIN_SCK;
 
-    err_code = nrf_drv_spi_init(&m_spi_master_0, &spi_config,spi_event_handler,  NULL);
+    err_code = nrf_drv_spi_init(&m_spi_master_0, &spi_config, NULL, NULL);
     VERIFY_SUCCESS(err_code);
 
     nrf_gpio_cfg_output(VS1053_PIN_xReset);
