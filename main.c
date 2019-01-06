@@ -206,6 +206,11 @@ int main(void)
 
     ret_code_t ret = nrf_drv_clock_init();
     APP_ERROR_CHECK(ret);
+
+    // Configure LF Clock to use internal RC oscillator
+    NRF_CLOCK->LFCLKSRC = (uint32_t)((CLOCK_LFCLKSRC_SRC_RC << CLOCK_LFCLKSRC_SRC_Pos) & CLOCK_LFCLKSRC_SRC_Msk);
+    NRF_CLOCK->TASKS_LFCLKSTART = 1UL;
+
     nrf_drv_clock_lfclk_request(NULL);
 
     app_timer_init();

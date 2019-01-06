@@ -110,6 +110,7 @@ void vs1053_reset() {
     nrf_gpio_pin_write(VS1053_PIN_xCS, HIGH);
     nrf_gpio_pin_write(VS1053_PIN_xDCS, HIGH);
     nrf_gpio_pin_write(VS1053_PIN_xReset, HIGH);
+
     nrf_delay_ms(100);
     vs1053_soft_reset();
     nrf_delay_ms(100);
@@ -165,10 +166,12 @@ uint32_t vs1053_init() {
     nrf_gpio_cfg_output(VS1053_PIN_xReset);
     nrf_gpio_cfg_output(VS1053_PIN_xDCS);
     nrf_gpio_cfg_output(VS1053_PIN_xCS);
-    nrf_gpio_cfg_output(VS1053_PIN_CS);
     nrf_gpio_cfg_input(VS1053_PIN_DREQ, GPIO_PIN_CNF_PULL_Disabled);
     nrf_gpio_cfg_output(VS1053_PIN_LED);
-    nrf_gpio_pin_write(VS1053_PIN_CS, HIGH);
     nrf_gpio_pin_write(VS1053_PIN_xDCS, HIGH);
+ #ifdef VS1053_PIN_CS
+    nrf_gpio_cfg_output(VS1053_PIN_CS);
+    nrf_gpio_pin_write(VS1053_PIN_CS, HIGH);
+ #endif
     vs1053_reset();
 }
